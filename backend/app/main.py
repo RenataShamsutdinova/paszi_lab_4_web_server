@@ -522,3 +522,54 @@ def delete_resource(
     db.commit()
 
     return {"message": "Ресурс успешно удалён"}
+
+
+@app.get("/api/resources/{resource_id}/permissions")
+def get_resource_permissions(
+    resource_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Находим документ
+    resource = db.query(Resource).filter(
+        Resource.id == resource_id
+    ).first()
+
+    if resource is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Документ не найден",
+        )
+
+    # Только владелец может просматривать список выданных разрешений
+    if resource.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только владелец может просматривать список разрешений",
+        )
+
+    # Получаем разрешения и логины пользователей
+    permissions = (
+        db.query(ResourcePermission, User.login)
+        .join(
+            User,
+            User.id == ResourcePermission.user_id,
+        )
+        .filter(
+            ResourcePermission.resource_id == resource_id
+        )
+        .order_by(User.login)
+        .all()
+    )
+
+    # Формируем ответ для frontend
+    return [
+        {
+            "user_id": permission.user_id,
+            "user_login": login,
+            "can_read": permission.can_read,
+            "can_update": permission.can_update,
+            "can_delete": permission.can_delete,
+        }
+        for permission, login in permissions
+    ]

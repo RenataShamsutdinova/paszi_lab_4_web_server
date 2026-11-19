@@ -36,6 +36,14 @@ interface PermissionSettings {
   can_delete: boolean;
 }
 
+interface GrantedPermission {
+  user_id: number;
+  user_login: string;
+  can_read: boolean;
+  can_update: boolean;
+  can_delete: boolean;
+}
+
 interface ApiError {
   detail?: string | Array<{
     msg?: string;
@@ -162,6 +170,7 @@ function App() {
   const [permissionStatus, setPermissionStatus] = useState("");
   const [isSavingPermission, setIsSavingPermission] = useState(false);
 
+  const [grantedPermissions, setGrantedPermissions] = useState<GrantedPermission[]>([]);
   // восстановление авторизации после перезагрузки страницы
 
   useEffect(() => {
@@ -389,6 +398,13 @@ function App() {
       ]);
 
       setSelectedResource(resource);
+
+      if (resource.owner_id === currentUser?.id) {
+        await loadGrantedPermissions(resourceId);
+      } else {
+        setGrantedPermissions([]);
+      }
+
       setResourcePermissions(permissions);
 
       setEditName(resource.name);
@@ -645,6 +661,8 @@ function App() {
         can_update: false,
         can_delete: false,
       });
+
+      await loadGrantedPermissions(selectedResource.id);
     } catch (error) {
       setPermissionStatus(
         error instanceof Error
@@ -653,6 +671,22 @@ function App() {
       );
     } finally {
       setIsSavingPermission(false);
+    }
+  }
+
+  //список выданных прав другим пользователям
+  async function loadGrantedPermissions(resourceId: number) {
+    try {
+      const permissions = await apiRequest<GrantedPermission[]>(
+        `/api/resources/${resourceId}/permissions`,
+        {},
+        accessToken
+      );
+
+      setGrantedPermissions(permissions);
+    } catch (error) {
+      console.error('Не удалось загрузить список разрешений:', error);
+      setGrantedPermissions([]);
     }
   }
 
@@ -1172,6 +1206,38 @@ function App() {
                             : "Сохранить права доступа"}
                         </button>
                       </form>
+
+                      <div className="granted-permissions">
+                        {/* блок со списком пользователей */}
+                        <h3>Пользователи с доступом</h3>
+
+                        {grantedPermissions.length === 0 ? (
+                          <p className="permissions-empty">
+                            Доступ к этому документу пока никому не предоставлен.
+                          </p>
+                        ) : (
+                          <table className="permissions-table">
+                            <thead>
+                              <tr>
+                                <th>Пользователь</th>
+                                <th>Чтение</th>
+                                <th>Изменение</th>
+                                <th>Удаление</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {grantedPermissions.map((permission) => (
+                                <tr key={permission.user_id}>
+                                  <td>{permission.user_login}</td>
+                                  <td>{permission.can_read ? "✓" : "—"}</td>
+                                  <td>{permission.can_update ? "✓" : "—"}</td>
+                                  <td>{permission.can_delete ? "✓" : "—"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
 
                       {permissionStatus && (
                         <div className="status-message">
